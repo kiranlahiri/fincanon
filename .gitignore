@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Mac/Linux/Windows cruft
+.DS_Store
+Thumbs.db
+
+# Logs / caches
+*.log
+*.sqlite3
+*.db
+*.cache/
+*.pytest_cache/
+*.mypy_cache/
+*.coverage
+coverage.xml
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+
+# Qdrant local volumes (if you run Docker with mounted storage)
+qdrant_storage/
+
+# Keys & secrets (you may already have this in env vars, but just in case)
+*.env
+.env.*
