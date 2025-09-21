@@ -44,12 +44,20 @@ def ingest_pdf(pdf_path: str, doc_title: str):
 
     # 4. Qdrant client
     qdrant_client = QdrantClient(QDRANT_URL)
-    qdrant = qdrant = QdrantVectorStore.from_documents(
-        chunks,
-        embeddings,
-        url=QDRANT_URL,
-        collection_name=COLLECTION_NAME
-    )
+    try:
+        qdrant = QdrantVectorStore.from_existing_collection(
+            embedding=embeddings,
+            url="http://localhost:6333",
+            collection_name="fincanon_papers"
+        )
+        qdrant.add_documents(chunks)
+    except:
+        qdrant = QdrantVectorStore.from_documents(
+            chunks,
+            embeddings,
+            url="http://localhost:6333",
+            collection_name="fincanon_papers"
+        )
 
     print(f"✅ Ingested {len(chunks)} chunks from {doc_title} into Qdrant")
 
@@ -79,7 +87,7 @@ def build_qa_chain():
         collection_name="fincanon_papers",
         embedding=embeddings
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 8})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 15})
 
     # Custom prompt
     custom_prompt = PromptTemplate(
