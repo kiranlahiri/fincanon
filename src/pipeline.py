@@ -21,12 +21,14 @@ QDRANT_URL = "http://localhost:6333"  # or your Qdrant Cloud URL
 def ingest_pdf(pdf_path: str, doc_title: str):
     """Load, chunk, embed, and store a PDF into Qdrant."""
     # 1. Load PDF
-   # loader = PyMuPDFLoader(pdf_path)
-   # docs = loader.load()
-
-
-    loader = UnstructuredPDFLoader(pdf_path)
+    # Option A: Use UnstructuredPDFLoader with mode='elements' to get page_number
+    loader = UnstructuredPDFLoader(pdf_path, mode="elements")
     docs = loader.load()
+
+    # Option B (alternative): Use PyMuPDFLoader which extracts page numbers as 'page' (0-indexed)
+    # from langchain_community.document_loaders import PyMuPDFLoader
+    # loader = PyMuPDFLoader(pdf_path)
+    # docs = loader.load()
 
     # 2. Split into chunks
     splitter = RecursiveCharacterTextSplitter(
@@ -36,13 +38,26 @@ def ingest_pdf(pdf_path: str, doc_title: str):
 )
     chunks = splitter.split_documents(docs)
 
+    # 3. Normalize metadata to extract page numbers consistently
     for chunk in chunks:
-        chunk.metadata = {"title": doc_title, "page": chunk.metadata.get("page", None)}
+        # UnstructuredPDFLoader with mode='elements' uses 'page_number' (1-indexed)
+        # PyMuPDFLoader uses 'page' (0-indexed)
+        page_num = chunk.metadata.get("page_number") or chunk.metadata.get("page")
 
-    # 3. Embeddings
+        # Convert to 1-indexed if using PyMuPDFLoader (which is 0-indexed)
+        if "page" in chunk.metadata and "page_number" not in chunk.metadata:
+            page_num = page_num + 1 if page_num is not None else None
+
+        chunk.metadata = {
+            "title": doc_title,
+            "page": page_num,
+            "source": chunk.metadata.get("source", pdf_path)
+        }
+
+    # 4. Embeddings
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
-    # 4. Qdrant client
+    # 5. Qdrant client
     qdrant_client = QdrantClient(QDRANT_URL)
     try:
         qdrant = QdrantVectorStore.from_existing_collection(
@@ -62,19 +77,23 @@ def ingest_pdf(pdf_path: str, doc_title: str):
     print(f"✅ Ingested {len(chunks)} chunks from {doc_title} into Qdrant")
 
 def query_fincanon(query: str, k: int = 3):
-    """Query Qdrant for relevant chunks."""
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    qdrant = QdrantVectorStore(
-        QdrantClient(QDRANT_URL),
-        COLLECTION_NAME,
-        embeddings
-    )
-    results = qdrant.similarity_search(query, k=k)
-    print("🔎 Query results:")
-    for i, res in enumerate(results, start=1):
-        print(f"\nResult {i}:")
-        print(res.page_content[:300], "...")
-        print(f"(Metadata: {res.metadata})")
+    """Query Qdrant for relevant chunks and generate an answer using LLM."""
+    # Build the QA chain
+    qa_chain = build_qa_chain()
+
+    # Get answer with sources
+    result = qa_chain.invoke({"query": query})
+
+    # Extract answer and format sources
+    answer = result["result"]
+    sources = []
+    for doc in result["source_documents"][:k]:
+        sources.append({
+            "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+            "metadata": doc.metadata
+        })
+
+    return answer, sources
 
 
 def build_qa_chain():

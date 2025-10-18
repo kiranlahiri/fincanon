@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 import pandas as pd
 from metrics import analyze_portfolio
+from pipeline import query_fincanon 
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -37,3 +38,13 @@ async def analyze(file: UploadFile = File(...)):
     results = analyze_portfolio(df)
 
     return results
+
+@app.post("/query")
+async def query(payload: dict):
+    """
+    Accepts a question string from the frontend, queries the RAG pipeline,
+    and returns an answer and the list of sources.
+    """
+    question = payload["question"]
+    answer, sources = query_fincanon(question)
+    return {"answer": answer, "sources": sources}

@@ -4,11 +4,19 @@ from pipeline import ingest_pdf, query_fincanon, build_qa_chain
 from metrics import analyze_portfolio
 
 
-# Ingest a PDF
-ingest_pdf("markowitz_JF.pdf", "Portfolio Selection")
+# Ingest a PDF (uncomment to re-ingest)
+# ingest_pdf("markowitz_JF.pdf", "Portfolio Selection")
 
 # Run a test query
-query_fincanon("What is the best way to construct a portfolio?")
+answer, sources = query_fincanon("What is the best way to construct a portfolio?")
+print("🔎 Question: What is the best way to construct a portfolio?")
+print(f"\n📖 Answer: {answer}")
+print(f"\n📚 Sources ({len(sources)} documents):")
+for i, source in enumerate(sources, 1):
+    print(f"\n  Source {i}:")
+    print(f"    Page: {source['metadata'].get('page')}")
+    print(f"    Title: {source['metadata'].get('title')}")
+    print(f"    Content: {source['content'][:100]}...")
 
 
 
