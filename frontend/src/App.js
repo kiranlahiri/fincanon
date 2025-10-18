@@ -5,6 +5,8 @@ function App() {
   const [file, setFile] = useState(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [metrics, setMetrics] = useState(null);
 
   const handleFileChange = (e) => {
@@ -37,13 +39,33 @@ function App() {
   };
 
   const handleAsk = async () => {
-    const res = await fetch("http://localhost:8000/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
-    });
-    const data = await res.json();
-    setAnswer(data.answer);
+    if (!question.trim()) {
+      alert("Please enter a question");
+      return;
+    }
+
+    setLoading(true);
+    setAnswer("");
+    setSources([]);
+
+    try {
+      const res = await fetch("http://localhost:8000/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+      const data = await res.json();
+      setAnswer(data.answer);
+      setSources(data.sources || []);
+    } catch (err) {
+      console.error("Query failed:", err);
+      alert("Failed to get answer. Make sure the backend is running and papers are ingested.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -89,11 +111,32 @@ function App() {
       type="text"
       value={question}
       onChange={(e) => setQuestion(e.target.value)}
+      placeholder="e.g., What is portfolio diversification?"
     />
-    <button onClick={handleAsk}>Ask</button>
+    <button onClick={handleAsk} disabled={loading}>
+      {loading ? "Thinking..." : "Ask"}
+    </button>
 
-    <h2>Answer</h2>
-    <p>{answer}</p>
+    {answer && (
+      <div className="answer-section">
+        <h2>Answer</h2>
+        <p>{answer}</p>
+
+        {sources.length > 0 && (
+          <div className="sources-section">
+            <h3>Sources</h3>
+            {sources.map((source, idx) => (
+              <div key={idx} className="source-item">
+                <strong>
+                  {source.metadata.title} (Page {source.metadata.page})
+                </strong>
+                <p>{source.content}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
   </div>
 );
 }
