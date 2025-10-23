@@ -8,6 +8,10 @@ from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain_community.document_loaders import UnstructuredPDFLoader
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from typing import List
+from langchain_core.documents import Document
 
 
 
@@ -59,20 +63,42 @@ def ingest_pdf(pdf_path: str, doc_title: str):
 
     # 5. Qdrant client
     qdrant_client = QdrantClient(QDRANT_URL)
+
+    # Check if collection exists
     try:
+        qdrant_client.get_collection("fincanon_papers")
+        collection_exists = True
+    except:
+        collection_exists = False
+
+    if collection_exists:
+        # Add to existing collection
         qdrant = QdrantVectorStore.from_existing_collection(
             embedding=embeddings,
             url="http://localhost:6333",
             collection_name="fincanon_papers"
         )
-        qdrant.add_documents(chunks)
-    except:
-        qdrant = QdrantVectorStore.from_documents(
-            chunks,
-            embeddings,
-            url="http://localhost:6333",
-            collection_name="fincanon_papers"
-        )
+        print(f"Adding {len(chunks)} chunks to existing collection...")
+        try:
+            qdrant.add_documents(chunks)
+            print(f"✅ Successfully added {len(chunks)} chunks")
+        except Exception as e:
+            print(f"❌ Error adding documents: {e}")
+            raise
+    else:
+        # Create new collection
+        print(f"Creating new collection with {len(chunks)} chunks...")
+        try:
+            qdrant = QdrantVectorStore.from_documents(
+                chunks,
+                embeddings,
+                url="http://localhost:6333",
+                collection_name="fincanon_papers"
+            )
+            print(f"✅ Successfully created collection with {len(chunks)} chunks")
+        except Exception as e:
+            print(f"❌ Error creating collection: {e}")
+            raise
 
     print(f"✅ Ingested {len(chunks)} chunks from {doc_title} into Qdrant")
 
@@ -90,6 +116,15 @@ def query_fincanon(query: str, k: int = 3, portfolio_context: dict = None):
     # Get answer with sources
     result = qa_chain.invoke({"query": query})
 
+    # DEBUG: Print all retrieved documents
+    print("\n" + "="*80)
+    print(f"DEBUG: Retrieved {len(result['source_documents'])} documents for query: '{query}'")
+    print("="*80)
+    for i, doc in enumerate(result["source_documents"], 1):
+        print(f"\n[{i}] {doc.metadata.get('title', 'Unknown')} (Page {doc.metadata.get('page', '?')})")
+        print(f"    Content preview: {doc.page_content[:150]}...")
+    print("\n" + "="*80 + "\n")
+
     # Extract answer and format sources
     answer = result["result"]
     sources = []
@@ -102,6 +137,89 @@ def query_fincanon(query: str, k: int = 3, portfolio_context: dict = None):
     return answer, sources
 
 
+def expand_query_with_terminology(query: str) -> list:
+    """Generate multiple query variations to bridge modern/historical terminology.
+
+    This helps retrieve papers that use older terminology (e.g., Markowitz's "efficient set")
+    when users ask questions with modern terms (e.g., "efficient frontier").
+
+    Returns a list of query strings, starting with the original.
+    """
+    query_variations = [query]  # Always include original query
+
+    # Static mapping of modern terms to historical equivalents used in seminal papers
+    term_replacements = {
+        "efficient frontier": ["efficient set", "E-V efficient combinations", "mean-variance frontier"],
+        "mean-variance": ["E-V analysis", "expected return and variance"],
+        "sharpe ratio": ["reward-to-variability ratio", "risk-adjusted performance"],
+        "optimal portfolio": ["efficient portfolio", "optimal E-V combination"],
+        "diversification": ["portfolio selection", "spreading of risk"],
+        "alpha": ["excess return", "abnormal return"],
+        "beta": ["systematic risk", "market sensitivity"],
+        "capm": ["capital asset pricing", "market model"],
+    }
+
+    # Generate variations by replacing modern terms with historical ones
+    query_lower = query.lower()
+    for modern_term, historical_terms in term_replacements.items():
+        if modern_term in query_lower:
+            # Add variations with each historical term
+            for historical_term in historical_terms[:2]:  # Limit to 2 historical terms per modern term
+                variation = query_lower.replace(modern_term, historical_term)
+                query_variations.append(variation)
+            break  # Only expand one concept to keep list manageable (3 queries max)
+
+    return query_variations
+
+
+class MultiQueryRetriever(BaseRetriever):
+    """Custom retriever that expands queries with historical terminology."""
+
+    vectorstore: QdrantVectorStore
+    base_retriever: BaseRetriever
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, vectorstore, **kwargs):
+        base_retriever = vectorstore.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": 10,           # Get 10 chunks per query variation
+                "fetch_k": 40,
+                "lambda_mult": 0.8
+            }
+        )
+        super().__init__(vectorstore=vectorstore, base_retriever=base_retriever, **kwargs)
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun = None
+    ) -> List[Document]:
+        """Retrieve documents using query expansion for historical terminology."""
+        # Generate query variations
+        query_variations = expand_query_with_terminology(query)
+
+        print(f"\n🔍 Query expansion: {len(query_variations)} variations")
+        for i, var in enumerate(query_variations):
+            print(f"  [{i+1}] {var}")
+
+        # Retrieve documents for each query variation
+        all_docs = []
+        seen_content = set()  # Track unique chunks by content hash
+
+        for query_var in query_variations:
+            docs = self.base_retriever.get_relevant_documents(query_var)
+            for doc in docs:
+                # Deduplicate by content hash
+                content_hash = hash(doc.page_content[:200])
+                if content_hash not in seen_content:
+                    seen_content.add(content_hash)
+                    all_docs.append(doc)
+
+        # Return top 15 unique documents
+        return all_docs[:15]
+
+
 def build_qa_chain(portfolio_context: dict = None):
     """Build a QA chain with optional portfolio context.
 
@@ -111,41 +229,84 @@ def build_qa_chain(portfolio_context: dict = None):
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
     client = QdrantClient("http://localhost:6333")
 
-    # Create retriever with MMR for diverse multi-paper retrieval
+    # Create vectorstore
     vectorstore = QdrantVectorStore(
         client=client,
         collection_name="fincanon_papers",
         embedding=embeddings
     )
-    retriever = vectorstore.as_retriever(
-        search_type="mmr",  # Maximum Marginal Relevance for diversity
-        search_kwargs={
-            "k": 15,           # Return 15 diverse chunks
-            "fetch_k": 50,     # Initially fetch 50 candidates
-            "lambda_mult": 0.7 # Balance: 0.7 = more relevance, 0.5 = balanced, 0.3 = more diversity
-        }
-    )
+
+    # Use custom multi-query retriever with terminology expansion
+    retriever = MultiQueryRetriever(vectorstore)
 
     # Build portfolio context string if provided
     portfolio_info = ""
     if portfolio_context:
+        # Extract current portfolio metrics
+        current_return = portfolio_context.get('portfolio_return_annual', 0)
+        current_vol = portfolio_context.get('portfolio_vol_annual', 0)
+        current_sharpe = portfolio_context.get('portfolio_sharpe_annual', 0)
+
+        # Extract optimal portfolios if available
+        optimal = portfolio_context.get('optimal_portfolios', {})
+        max_sharpe = optimal.get('max_sharpe', {})
+        min_variance = optimal.get('min_variance', {})
+
+        # Build comparison string
+        comparison_info = ""
+        if max_sharpe and min_variance:
+            sharpe_diff = max_sharpe.get('sharpe', 0) - current_sharpe
+            vol_diff = current_vol - min_variance.get('volatility', 0)
+
+            comparison_info = f"""
+
+OPTIMAL PORTFOLIOS (for comparison):
+- Maximum Sharpe Portfolio:
+  * Return: {max_sharpe.get('return', 0)*100:.2f}%
+  * Volatility: {max_sharpe.get('volatility', 0)*100:.2f}%
+  * Sharpe Ratio: {max_sharpe.get('sharpe', 0):.3f}
+  * Top weights: {', '.join([f"{asset}: {weight*100:.1f}%" for asset, weight in zip(portfolio_context.get('asset_means', {}).keys(), max_sharpe.get('weights', [])) if weight > 0.05][:3])}
+
+- Minimum Variance Portfolio:
+  * Return: {min_variance.get('return', 0)*100:.2f}%
+  * Volatility: {min_variance.get('volatility', 0)*100:.2f}%
+  * Sharpe Ratio: {min_variance.get('sharpe', 0):.3f}
+  * Top weights: {', '.join([f"{asset}: {weight*100:.1f}%" for asset, weight in zip(portfolio_context.get('asset_means', {}).keys(), min_variance.get('weights', [])) if weight > 0.05][:3])}
+
+COMPARISON TO OPTIMAL:
+- Your Sharpe ({current_sharpe:.3f}) vs Max Sharpe ({max_sharpe.get('sharpe', 0):.3f}): Gap of {sharpe_diff:.3f}
+- Your Volatility ({current_vol*100:.2f}%) vs Min Variance ({min_variance.get('volatility', 0)*100:.2f}%): Difference of {vol_diff*100:.2f}%
+- Your portfolio {"lies on" if abs(sharpe_diff) < 0.1 else "is below"} the efficient frontier
+"""
+
         portfolio_info = f"""
 
 USER'S PORTFOLIO DATA:
-- Annual Return: {portfolio_context.get('portfolio_return_annual', 'N/A'):.4f} ({portfolio_context.get('portfolio_return_annual', 0)*100:.2f}%)
-- Annual Volatility: {portfolio_context.get('portfolio_vol_annual', 'N/A'):.4f} ({portfolio_context.get('portfolio_vol_annual', 0)*100:.2f}%)
-- Annual Sharpe Ratio: {portfolio_context.get('portfolio_sharpe_annual', 'N/A'):.4f}
-- Asset Composition: {', '.join([f"{asset}: {val:.4f}" for asset, val in portfolio_context.get('asset_means', {}).items()])}
-
-When answering, relate the theoretical concepts from the papers to the user's specific portfolio metrics above.
+- Annual Return: {current_return*100:.2f}%
+- Annual Volatility: {current_vol*100:.2f}%
+- Annual Sharpe Ratio: {current_sharpe:.3f}
+- Maximum Drawdown: {portfolio_context.get('max_drawdown', 0)*100:.2f}%
+- Sortino Ratio: {portfolio_context.get('sortino_ratio_annual', 0):.3f}
+- Diversification Ratio: {portfolio_context.get('diversification_ratio', 0):.3f}
+- Asset Composition: {', '.join([f"{asset}" for asset in portfolio_context.get('asset_means', {}).keys()])}
+{comparison_info}
+When answering, relate the theoretical concepts from the papers to the user's specific portfolio metrics and optimal portfolios above.
+Use the comparison data to provide specific, actionable insights about how the user's portfolio performs relative to the efficient frontier.
 """
 
     # Custom prompt with optional portfolio context
     custom_prompt = PromptTemplate(
-        template="""You are a financial research assistant specializing in portfolio theory.
-Use the provided context from canonical finance papers to answer the question clearly.
-If the context is relevant but indirect, explain the link in your own words.
-If there is no relevant context at all, say you cannot answer.
+        template="""You are a finance research assistant specializing in portfolio theory, grounded in seminal academic papers.
+
+When answering:
+- Ground your explanations in the academic papers when discussing theoretical concepts
+- Cite specific papers and authors when introducing frameworks (e.g., "Markowitz (1952) developed the mean-variance framework...")
+- Prioritize citing the PRIMARY papers from the context (e.g., if answering about momentum, cite Jegadeesh and Titman prominently)
+- If you reference secondary citations mentioned within a paper, clarify this (e.g., "as discussed in Jegadeesh and Titman")
+- Use precise academic terminology from the original sources (e.g., "efficient set", "E-V combinations", "attainable set")
+- For portfolio-specific questions, blend theory with practical analysis
+- Prioritize clarity and actionable insights over academic verbosity
+
 {portfolio_info}
 Context from Research Papers:
 {context}

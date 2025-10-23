@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./App.css";
+import EfficientFrontierChart from "./EfficientFrontierChart";
 
 function App() {
   const [file, setFile] = useState(null);
@@ -87,32 +88,92 @@ function App() {
     {metrics && (
   <div className="metrics-section">
     <h2>Portfolio Metrics</h2>
+
+    <h3>Performance</h3>
     <ul>
-      <li>Annual Return: {metrics.portfolio_return_annual.toFixed(4)}</li>
-      <li>Annual Volatility: {metrics.portfolio_vol_annual.toFixed(4)}</li>
-      <li>Annual Sharpe: {metrics.portfolio_sharpe_annual.toFixed(4)}</li>
+      <li>Annual Return: {metrics.portfolio_return_annual ? (metrics.portfolio_return_annual * 100).toFixed(2) + '%' : 'N/A'}</li>
+      <li>Annual Volatility: {metrics.portfolio_vol_annual ? (metrics.portfolio_vol_annual * 100).toFixed(2) + '%' : 'N/A'}</li>
+      <li>Sharpe Ratio: {metrics.portfolio_sharpe_annual ? metrics.portfolio_sharpe_annual.toFixed(3) : 'N/A'}</li>
+      <li>Sortino Ratio: {metrics.sortino_ratio_annual ? metrics.sortino_ratio_annual.toFixed(3) : 'N/A'}</li>
     </ul>
 
-    <h3>Asset Means</h3>
+    <h3>Risk Metrics</h3>
+    <ul>
+      <li>Maximum Drawdown: {metrics.max_drawdown ? (metrics.max_drawdown * 100).toFixed(2) + '%' : 'N/A'}</li>
+      <li>Diversification Ratio: {metrics.diversification_ratio ? metrics.diversification_ratio.toFixed(3) : 'N/A'}</li>
+      {metrics.beta && <li>Beta vs SPY: {metrics.beta.toFixed(3)}</li>}
+    </ul>
+
+    <h3>Asset Returns (Annualized)</h3>
     <ul>
       {Object.entries(metrics.asset_means).map(([asset, value]) => (
         <li key={asset}>
-          {asset}: {value.toFixed(4)}
+          {asset}: {(value * 252 * 100).toFixed(2)}%
         </li>
       ))}
     </ul>
 
-    <h3>Asset Volatilities</h3>
+    <h3>Asset Volatility (Annualized)</h3>
     <ul>
       {Object.entries(metrics.asset_vols).map(([asset, value]) => (
         <li key={asset}>
-          {asset}: {value.toFixed(4)}
+          {asset}: {(value * Math.sqrt(252) * 100).toFixed(2)}%
         </li>
       ))}
     </ul>
+
+    {metrics.optimal_portfolios && (
+      <>
+        <h3>Optimal Portfolios</h3>
+
+        <div className="optimal-portfolio">
+          <h4>🔹 Minimum Variance Portfolio</h4>
+          <ul>
+            <li>Return: {(metrics.optimal_portfolios.min_variance.return * 100).toFixed(2)}%</li>
+            <li>Volatility: {(metrics.optimal_portfolios.min_variance.volatility * 100).toFixed(2)}%</li>
+            <li>Sharpe: {metrics.optimal_portfolios.min_variance.sharpe.toFixed(3)}</li>
+          </ul>
+          <details>
+            <summary>View Weights</summary>
+            <ul>
+              {metrics.optimal_portfolios.min_variance.weights.map((weight, idx) => {
+                const assetName = Object.keys(metrics.asset_means)[idx];
+                return weight > 0.01 ? (
+                  <li key={idx}>{assetName}: {(weight * 100).toFixed(1)}%</li>
+                ) : null;
+              })}
+            </ul>
+          </details>
+        </div>
+
+        <div className="optimal-portfolio">
+          <h4>🔹 Maximum Sharpe Portfolio</h4>
+          <ul>
+            <li>Return: {(metrics.optimal_portfolios.max_sharpe.return * 100).toFixed(2)}%</li>
+            <li>Volatility: {(metrics.optimal_portfolios.max_sharpe.volatility * 100).toFixed(2)}%</li>
+            <li>Sharpe: {metrics.optimal_portfolios.max_sharpe.sharpe.toFixed(3)}</li>
+          </ul>
+          <details>
+            <summary>View Weights</summary>
+            <ul>
+              {metrics.optimal_portfolios.max_sharpe.weights.map((weight, idx) => {
+                const assetName = Object.keys(metrics.asset_means)[idx];
+                return weight > 0.01 ? (
+                  <li key={idx}>{assetName}: {(weight * 100).toFixed(1)}%</li>
+                ) : null;
+              })}
+            </ul>
+          </details>
+        </div>
+      </>
+    )}
   </div>
 )}
 
+    {/* Efficient Frontier Chart */}
+    {metrics && metrics.efficient_frontier && (
+      <EfficientFrontierChart metrics={metrics} />
+    )}
 
     <h2>Ask a Question</h2>
     {metrics && (
