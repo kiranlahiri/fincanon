@@ -76,10 +76,16 @@ def ingest_pdf(pdf_path: str, doc_title: str):
 
     print(f"✅ Ingested {len(chunks)} chunks from {doc_title} into Qdrant")
 
-def query_fincanon(query: str, k: int = 3):
-    """Query Qdrant for relevant chunks and generate an answer using LLM."""
-    # Build the QA chain
-    qa_chain = build_qa_chain()
+def query_fincanon(query: str, k: int = 3, portfolio_context: dict = None):
+    """Query Qdrant for relevant chunks and generate an answer using LLM.
+
+    Args:
+        query: The user's question
+        k: Number of source documents to return
+        portfolio_context: Optional dictionary containing portfolio metrics
+    """
+    # Build the QA chain with portfolio context
+    qa_chain = build_qa_chain(portfolio_context=portfolio_context)
 
     # Get answer with sources
     result = qa_chain.invoke({"query": query})
@@ -96,31 +102,58 @@ def query_fincanon(query: str, k: int = 3):
     return answer, sources
 
 
-def build_qa_chain():
+def build_qa_chain(portfolio_context: dict = None):
+    """Build a QA chain with optional portfolio context.
+
+    Args:
+        portfolio_context: Optional dict with portfolio metrics to enhance answers
+    """
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
     client = QdrantClient("http://localhost:6333")
 
-    # Create retriever
+    # Create retriever with MMR for diverse multi-paper retrieval
     vectorstore = QdrantVectorStore(
         client=client,
         collection_name="fincanon_papers",
         embedding=embeddings
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 15})
+    retriever = vectorstore.as_retriever(
+        search_type="mmr",  # Maximum Marginal Relevance for diversity
+        search_kwargs={
+            "k": 15,           # Return 15 diverse chunks
+            "fetch_k": 50,     # Initially fetch 50 candidates
+            "lambda_mult": 0.7 # Balance: 0.7 = more relevance, 0.5 = balanced, 0.3 = more diversity
+        }
+    )
 
-    # Custom prompt
+    # Build portfolio context string if provided
+    portfolio_info = ""
+    if portfolio_context:
+        portfolio_info = f"""
+
+USER'S PORTFOLIO DATA:
+- Annual Return: {portfolio_context.get('portfolio_return_annual', 'N/A'):.4f} ({portfolio_context.get('portfolio_return_annual', 0)*100:.2f}%)
+- Annual Volatility: {portfolio_context.get('portfolio_vol_annual', 'N/A'):.4f} ({portfolio_context.get('portfolio_vol_annual', 0)*100:.2f}%)
+- Annual Sharpe Ratio: {portfolio_context.get('portfolio_sharpe_annual', 'N/A'):.4f}
+- Asset Composition: {', '.join([f"{asset}: {val:.4f}" for asset, val in portfolio_context.get('asset_means', {}).items()])}
+
+When answering, relate the theoretical concepts from the papers to the user's specific portfolio metrics above.
+"""
+
+    # Custom prompt with optional portfolio context
     custom_prompt = PromptTemplate(
-        template="""You are a financial research assistant.
+        template="""You are a financial research assistant specializing in portfolio theory.
 Use the provided context from canonical finance papers to answer the question clearly.
 If the context is relevant but indirect, explain the link in your own words.
 If there is no relevant context at all, say you cannot answer.
-
-Context:
+{portfolio_info}
+Context from Research Papers:
 {context}
 
 Question: {question}
 Answer:""",
         input_variables=["context", "question"],
+        partial_variables={"portfolio_info": portfolio_info}
     )
 
     # Wrap retriever with GPT

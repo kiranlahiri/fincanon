@@ -49,10 +49,18 @@ function App() {
     setSources([]);
 
     try {
+      // Build the request payload
+      const payload = { question };
+
+      // If portfolio metrics are available, include them
+      if (metrics) {
+        payload.portfolio_metrics = metrics;
+      }
+
       const res = await fetch("http://localhost:8000/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -107,11 +115,18 @@ function App() {
 
 
     <h2>Ask a Question</h2>
+    {metrics && (
+      <p className="portfolio-indicator">
+        ✓ Portfolio data loaded - answers will be personalized to your portfolio
+      </p>
+    )}
     <input
       type="text"
       value={question}
       onChange={(e) => setQuestion(e.target.value)}
-      placeholder="e.g., What is portfolio diversification?"
+      placeholder={metrics
+        ? "e.g., How does my Sharpe ratio compare to theory?"
+        : "e.g., What is portfolio diversification?"}
     />
     <button onClick={handleAsk} disabled={loading}>
       {loading ? "Thinking..." : "Ask"}

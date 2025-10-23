@@ -119,3 +119,13 @@ input[type="text"] {
   width: 70%;
   margin-right: 10px;
 }
+
+.portfolio-indicator {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 10px 15px;
+  border-radius: 5px;
+  border-left: 4px solid #28a745;
+  margin: 10px 0;
+  font-size: 14px;
+}

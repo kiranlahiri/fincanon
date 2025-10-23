@@ -4,22 +4,15 @@ from pipeline import ingest_pdf, query_fincanon, build_qa_chain
 from metrics import analyze_portfolio
 
 
-# Ingest all three finance papers (comment out after first run if you don't want to re-ingest)
-print("🔄 Ingesting papers into Qdrant...")
-papers = [
-    ("markowitz_JF.pdf", "Portfolio Selection"),
-    ("Sharpe_1964.pdf", "Capital Asset Pricing Model"),
-    ("FAMA_FRENCH.pdf", "The Cross-Section of Expected Stock Returns")
-]
+# NOTE: Paper ingestion has moved to the batch script!
+# To ingest papers, use: python ../ingest_papers.py
+# See papers/README.md for instructions
 
-for file_path, title in papers:
-    ingest_pdf(file_path, title)
-
-print("\n" + "="*60)
-print("📚 All papers ingested! Now testing query...")
+# Example: Test a query (assumes papers are already ingested)
+print("="*60)
+print("Testing RAG Query")
 print("="*60 + "\n")
 
-# Run a test query
 answer, sources = query_fincanon("What is the best way to construct a portfolio?", k=3)
 print("🔎 Question: What is the best way to construct a portfolio?")
 print(f"\n📖 Answer: {answer}")

@@ -1,0 +1,201 @@
+{
+  "papers": [
+    {
+      "id": "markowitz_1952",
+      "filename": "markowitz_JF.pdf",
+      "category": "portfolio_theory",
+      "title": "Portfolio Selection",
+      "authors": [
+        "Harry Markowitz"
+      ],
+      "year": 1952,
+      "journal": "The Journal of Finance",
+      "key_concepts": [
+        "mean-variance optimization",
+        "efficient frontier",
+        "diversification"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "sharpe_1964",
+      "filename": "Sharpe_1964.pdf",
+      "category": "asset_pricing",
+      "title": "Capital Asset Prices: A Theory of Market Equilibrium under Conditions of Risk",
+      "authors": [
+        "William F. Sharpe"
+      ],
+      "year": 1964,
+      "journal": "The Journal of Finance",
+      "key_concepts": [
+        "CAPM",
+        "systematic risk",
+        "beta",
+        "market portfolio"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "fama_french_1992",
+      "filename": "FAMA_FRENCH.pdf",
+      "category": "asset_pricing",
+      "title": "The Cross-Section of Expected Stock Returns",
+      "authors": [
+        "Eugene F. Fama",
+        "Kenneth R. French"
+      ],
+      "year": 1992,
+      "journal": "The Journal of Finance",
+      "key_concepts": [
+        "three-factor model",
+        "size effect",
+        "value premium",
+        "beta"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "black_scholes_1973",
+      "filename": "black_scholes_1973.pdf",
+      "category": "asset_pricing",
+      "title": "The Pricing of Options and Corporate Liabilities",
+      "authors": [
+        "Fischer Black",
+        "Myron Scholes"
+      ],
+      "year": 1973,
+      "journal": "Journal of Political Economy",
+      "key_concepts": [
+        "options pricing",
+        "derivatives",
+        "risk-neutral valuation"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "merton_1973",
+      "filename": "merton_1973.pdf",
+      "category": "asset_pricing",
+      "title": "An Intertemporal Capital Asset Pricing Model",
+      "authors": [
+        "Robert C. Merton"
+      ],
+      "year": 1973,
+      "journal": "Econometrica",
+      "key_concepts": [
+        "intertemporal choice",
+        "continuous-time finance",
+        "state variables"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "ross_1976",
+      "filename": "ross_1976.pdf",
+      "category": "asset_pricing",
+      "title": "The Arbitrage Theory of Capital Asset Pricing",
+      "authors": [
+        "Stephen A. Ross"
+      ],
+      "year": 1976,
+      "journal": "Journal of Economic Theory",
+      "key_concepts": [
+        "APT",
+        "factor models",
+        "arbitrage",
+        "no-arbitrage pricing"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "fama_1970",
+      "filename": "fama_1970.pdf",
+      "category": "market_efficiency",
+      "title": "Efficient Capital Markets: A Review of Theory and Empirical Work",
+      "authors": [
+        "Eugene F. Fama"
+      ],
+      "year": 1970,
+      "journal": "The Journal of Finance",
+      "key_concepts": [
+        "EMH",
+        "weak form",
+        "semi-strong form",
+        "strong form",
+        "random walk"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "kahneman_tversky_1979",
+      "filename": "kahneman_tversky_1979.pdf",
+      "category": "behavioral_finance",
+      "title": "Prospect Theory: An Analysis of Decision under Risk",
+      "authors": [
+        "Daniel Kahneman",
+        "Amos Tversky"
+      ],
+      "year": 1979,
+      "journal": "Econometrica",
+      "key_concepts": [
+        "loss aversion",
+        "reference dependence",
+        "probability weighting",
+        "framing"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "engle_1982",
+      "filename": "engle_1982.pdf",
+      "category": "risk_management",
+      "title": "Autoregressive Conditional Heteroskedasticity with Estimates of the Variance of United Kingdom Inflation",
+      "authors": [
+        "Robert F. Engle"
+      ],
+      "year": 1982,
+      "journal": "Econometrica",
+      "key_concepts": [
+        "ARCH",
+        "volatility modeling",
+        "time-varying risk"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "jegadeesh_titman_1993",
+      "filename": "jegadeesh_titman_1993.pdf",
+      "category": "market_efficiency",
+      "title": "Returns to Buying Winners and Selling Losers: Implications for Stock Market Efficiency",
+      "authors": [
+        "Narasimhan Jegadeesh",
+        "Sheridan Titman"
+      ],
+      "year": 1993,
+      "journal": "The Journal of Finance",
+      "key_concepts": [
+        "momentum",
+        "market anomalies",
+        "price continuation"
+      ],
+      "ingested": true
+    },
+    {
+      "id": "carhart_1997",
+      "filename": "carhart_1997.pdf",
+      "category": "asset_pricing",
+      "title": "On Persistence in Mutual Fund Performance",
+      "authors": [
+        "Mark M. Carhart"
+      ],
+      "year": 1997,
+      "journal": "The Journal of Finance",
+      "key_concepts": [
+        "four-factor model",
+        "momentum factor",
+        "mutual fund performance"
+      ],
+      "ingested": false
+    }
+  ]
+}

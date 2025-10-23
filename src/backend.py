@@ -44,7 +44,11 @@ async def query(payload: dict):
     """
     Accepts a question string from the frontend, queries the RAG pipeline,
     and returns an answer and the list of sources.
+
+    Optionally accepts portfolio_metrics to provide portfolio-aware answers.
     """
     question = payload["question"]
-    answer, sources = query_fincanon(question)
+    portfolio_metrics = payload.get("portfolio_metrics", None)
+
+    answer, sources = query_fincanon(question, portfolio_context=portfolio_metrics)
     return {"answer": answer, "sources": sources}
