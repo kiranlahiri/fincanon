@@ -1,7 +1,8 @@
 from fastapi import FastAPI, UploadFile, File
 import pandas as pd
+import numpy as np
 from metrics import analyze_portfolio
-from pipeline import query_fincanon 
+from pipeline import query_fincanon
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,12 +31,32 @@ async def analyze(file: UploadFile = File(...)):
     Accepts a CSV file upload (portfolio data),
     computes metrics using analyze_portfolio,
     and returns the results as JSON.
+
+    CSV format:
+    - Row 1: Header with 'Date' and asset tickers
+    - Row 2: 'Weights' and corresponding portfolio weights (must sum to 1.0)
+    - Row 3+: Dates and daily returns (as decimals)
     """
     # Read CSV into DataFrame
-    df = pd.read_csv(file.file, index_col=0, parse_dates=True)
+    df = pd.read_csv(file.file, index_col=0, parse_dates=False)
+
+    # Extract weights if present (second row with index='Weights')
+    weights = None
+    if 'Weights' in df.index:
+        weights = df.loc['Weights'].values.astype(float)
+        # Remove weights row from dataframe
+        df = df.drop('Weights')
+
+        # Validate weights sum to ~1.0
+        weights_sum = weights.sum()
+        if not np.isclose(weights_sum, 1.0, atol=0.01):
+            return {"error": f"Weights must sum to 1.0 (got {weights_sum:.4f})"}
+
+    # Convert index to datetime
+    df.index = pd.to_datetime(df.index)
 
     # Compute portfolio metrics
-    results = analyze_portfolio(df)
+    results = analyze_portfolio(df, weights=weights)
 
     return results
 

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import "./App.css";
 import EfficientFrontierChart from "./EfficientFrontierChart";
+import TimeSeriesCharts from "./TimeSeriesCharts";
 
 function App() {
   const [file, setFile] = useState(null);
@@ -104,23 +105,72 @@ function App() {
       {metrics.beta && <li>Beta vs SPY: {metrics.beta.toFixed(3)}</li>}
     </ul>
 
-    <h3>Asset Returns (Annualized)</h3>
-    <ul>
-      {Object.entries(metrics.asset_means).map(([asset, value]) => (
-        <li key={asset}>
-          {asset}: {(value * 252 * 100).toFixed(2)}%
-        </li>
-      ))}
-    </ul>
+    <h3>Asset-Level Breakdown</h3>
+    <table className="asset-table">
+      <thead>
+        <tr>
+          <th>Asset</th>
+          <th>Weight</th>
+          <th>Return Contrib.</th>
+          <th>Asset Sharpe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {metrics.asset_weights && Object.entries(metrics.asset_weights)
+          .sort((a, b) => b[1] - a[1])
+          .map(([asset, weight]) => (
+          <tr key={asset}>
+            <td><strong>{asset}</strong></td>
+            <td>{(weight * 100).toFixed(1)}%</td>
+            <td>{metrics.asset_return_contributions[asset] ? (metrics.asset_return_contributions[asset] * 100).toFixed(2) + '%' : 'N/A'}</td>
+            <td>{metrics.asset_sharpes[asset] ? metrics.asset_sharpes[asset].toFixed(2) : 'N/A'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
 
-    <h3>Asset Volatility (Annualized)</h3>
-    <ul>
-      {Object.entries(metrics.asset_vols).map(([asset, value]) => (
-        <li key={asset}>
-          {asset}: {(value * Math.sqrt(252) * 100).toFixed(2)}%
-        </li>
-      ))}
-    </ul>
+    {metrics.top_correlations && metrics.top_correlations.length > 0 && (
+      <>
+        <h3>Top Asset Correlations</h3>
+        <ul>
+          {metrics.top_correlations.slice(0, 5).map((corr, idx) => (
+            <li key={idx}>
+              {corr.asset1} ↔ {corr.asset2}: {corr.correlation.toFixed(2)}
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
+
+    {metrics.windowed_metrics && metrics.windowed_metrics.length > 0 && (
+      <>
+        <h3>Quarterly Performance Trend</h3>
+        <table className="quarterly-table">
+          <thead>
+            <tr>
+              <th>Quarter</th>
+              <th>Return</th>
+              <th>Volatility</th>
+              <th>Sharpe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {metrics.windowed_metrics.slice(-6).map((window, idx) => (
+              <tr key={idx}>
+                <td>{window.quarter}</td>
+                <td>{window.return ? (window.return * 100).toFixed(1) + '%' : 'N/A'}</td>
+                <td>{window.volatility ? (window.volatility * 100).toFixed(1) + '%' : 'N/A'}</td>
+                <td style={{
+                  color: window.sharpe > 1.5 ? 'green' : window.sharpe < 0 ? 'red' : 'inherit'
+                }}>
+                  {window.sharpe ? window.sharpe.toFixed(2) : 'N/A'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    )}
 
     {metrics.optimal_portfolios && (
       <>
@@ -173,6 +223,11 @@ function App() {
     {/* Efficient Frontier Chart */}
     {metrics && metrics.efficient_frontier && (
       <EfficientFrontierChart metrics={metrics} />
+    )}
+
+    {/* Time Series Charts */}
+    {metrics && metrics.time_series && (
+      <TimeSeriesCharts timeSeries={metrics.time_series} />
     )}
 
     <h2>Ask a Question</h2>

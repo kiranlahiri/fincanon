@@ -258,6 +258,45 @@ def build_qa_chain(portfolio_context: dict = None):
             sharpe_diff = max_sharpe.get('sharpe', 0) - current_sharpe
             vol_diff = current_vol - min_variance.get('volatility', 0)
 
+            # Check if portfolio is on the efficient frontier
+            # Find the closest frontier point with similar return
+            efficient_frontier = portfolio_context.get('efficient_frontier', [])
+            on_frontier = False
+            closest_frontier_point = None
+            min_distance = float('inf')
+
+            for point in efficient_frontier:
+                # Calculate distance in return-volatility space
+                return_diff = abs(point['return'] - current_return)
+                vol_diff_point = abs(point['volatility'] - current_vol)
+                distance = (return_diff**2 + vol_diff_point**2)**0.5
+
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_frontier_point = point
+
+                # Check if portfolio is very close to this frontier point
+                # Within 2% return and 1% volatility is "on the frontier"
+                if return_diff < 0.02 and vol_diff_point < 0.01:
+                    on_frontier = True
+
+            # Determine frontier status message
+            if on_frontier:
+                frontier_status = "lies on or very close to the efficient frontier"
+                frontier_explanation = f"Your portfolio is efficient for your chosen risk level ({current_vol*100:.2f}% volatility)."
+            elif closest_frontier_point:
+                closest_sharpe = (closest_frontier_point['return'] - 0.04) / closest_frontier_point['volatility'] if closest_frontier_point['volatility'] > 0 else 0
+                sharpe_gap_from_frontier = closest_sharpe - current_sharpe
+                if sharpe_gap_from_frontier < 0.05:
+                    frontier_status = "lies very close to the efficient frontier"
+                    frontier_explanation = f"The nearest frontier point has {closest_frontier_point['return']*100:.2f}% return and {closest_frontier_point['volatility']*100:.2f}% volatility, which is nearly identical to your portfolio."
+                else:
+                    frontier_status = "is below the efficient frontier"
+                    frontier_explanation = f"The nearest efficient portfolio with similar return ({closest_frontier_point['return']*100:.2f}%) would have {closest_frontier_point['volatility']*100:.2f}% volatility (vs your {current_vol*100:.2f}%), suggesting room for optimization."
+            else:
+                frontier_status = "position relative to the efficient frontier is unclear"
+                frontier_explanation = "Insufficient frontier data to determine efficiency."
+
             comparison_info = f"""
 
 OPTIMAL PORTFOLIOS (for comparison):
@@ -265,33 +304,71 @@ OPTIMAL PORTFOLIOS (for comparison):
   * Return: {max_sharpe.get('return', 0)*100:.2f}%
   * Volatility: {max_sharpe.get('volatility', 0)*100:.2f}%
   * Sharpe Ratio: {max_sharpe.get('sharpe', 0):.3f}
+  * This is the highest risk-adjusted return point on the frontier (more aggressive, higher risk)
   * Top weights: {', '.join([f"{asset}: {weight*100:.1f}%" for asset, weight in zip(portfolio_context.get('asset_means', {}).keys(), max_sharpe.get('weights', [])) if weight > 0.05][:3])}
 
 - Minimum Variance Portfolio:
   * Return: {min_variance.get('return', 0)*100:.2f}%
   * Volatility: {min_variance.get('volatility', 0)*100:.2f}%
   * Sharpe Ratio: {min_variance.get('sharpe', 0):.3f}
+  * This is the lowest risk point on the frontier (more conservative)
   * Top weights: {', '.join([f"{asset}: {weight*100:.1f}%" for asset, weight in zip(portfolio_context.get('asset_means', {}).keys(), min_variance.get('weights', [])) if weight > 0.05][:3])}
 
-COMPARISON TO OPTIMAL:
-- Your Sharpe ({current_sharpe:.3f}) vs Max Sharpe ({max_sharpe.get('sharpe', 0):.3f}): Gap of {sharpe_diff:.3f}
-- Your Volatility ({current_vol*100:.2f}%) vs Min Variance ({min_variance.get('volatility', 0)*100:.2f}%): Difference of {vol_diff*100:.2f}%
-- Your portfolio {"lies on" if abs(sharpe_diff) < 0.1 else "is below"} the efficient frontier
+EFFICIENT FRONTIER ANALYSIS:
+- Your portfolio {frontier_status}
+- {frontier_explanation}
+- Note: The Maximum Sharpe portfolio has a higher Sharpe ratio ({max_sharpe.get('sharpe', 0):.3f} vs your {current_sharpe:.3f}) but takes significantly more risk ({max_sharpe.get('volatility', 0)*100:.2f}% vs {current_vol*100:.2f}% volatility). Both can be on the efficient frontier, just at different risk levels.
 """
+
+        # Extract asset-level metrics
+        asset_weights = portfolio_context.get('asset_weights', {})
+        asset_return_contribs = portfolio_context.get('asset_return_contributions', {})
+        asset_sharpes = portfolio_context.get('asset_sharpes', {})
+        top_correlations = portfolio_context.get('top_correlations', [])
+
+        # Format asset-level info
+        asset_info = "\n".join([
+            f"  * {asset}: {weight*100:.1f}% weight, contributes {asset_return_contribs.get(asset, 0)*100:.2f}% return, Sharpe={asset_sharpes.get(asset, 0):.2f}"
+            for asset, weight in sorted(asset_weights.items(), key=lambda x: x[1], reverse=True)
+        ])
+
+        corr_info = "\n".join([
+            f"  * {corr['asset1']} <-> {corr['asset2']}: {corr['correlation']:.2f}"
+            for corr in top_correlations[:3]
+        ])
+
+        # Extract windowed metrics (last 4 quarters)
+        windowed = portfolio_context.get('windowed_metrics', [])
+        recent_quarters = windowed[-4:] if len(windowed) >= 4 else windowed
+        window_info = "\n".join([
+            f"  * {w['quarter']}: Return={w['return']*100:.1f}%, Vol={w['volatility']*100:.1f}%, Sharpe={w['sharpe']:.2f}"
+            for w in recent_quarters
+        ])
 
         portfolio_info = f"""
 
 USER'S PORTFOLIO DATA:
+
+OVERALL METRICS:
 - Annual Return: {current_return*100:.2f}%
 - Annual Volatility: {current_vol*100:.2f}%
 - Annual Sharpe Ratio: {current_sharpe:.3f}
 - Maximum Drawdown: {portfolio_context.get('max_drawdown', 0)*100:.2f}%
 - Sortino Ratio: {portfolio_context.get('sortino_ratio_annual', 0):.3f}
 - Diversification Ratio: {portfolio_context.get('diversification_ratio', 0):.3f}
-- Asset Composition: {', '.join([f"{asset}" for asset in portfolio_context.get('asset_means', {}).keys()])}
+
+ASSET-LEVEL BREAKDOWN:
+{asset_info}
+
+TOP CORRELATIONS:
+{corr_info}
+
+RECENT QUARTERLY PERFORMANCE:
+{window_info}
 {comparison_info}
-When answering, relate the theoretical concepts from the papers to the user's specific portfolio metrics and optimal portfolios above.
-Use the comparison data to provide specific, actionable insights about how the user's portfolio performs relative to the efficient frontier.
+When answering, relate the theoretical concepts from the papers to the user's specific portfolio metrics above.
+Use asset-level data to explain what's driving portfolio performance and risk.
+Use quarterly trends to identify changes in performance over time.
 """
 
     # Custom prompt with optional portfolio context
@@ -325,6 +402,13 @@ When answering:
 - Do NOT provide unsolicited recommendations or suggest the user's portfolio needs fixing
 - When comparing to theoretical benchmarks, state facts and implications without judgmental language
 - Be analytical and insightful, not verbose or prescriptive
+
+IMPORTANT - EFFICIENT FRONTIER INTERPRETATION:
+- The efficient frontier contains MANY optimal portfolios at different risk levels
+- Having a lower Sharpe ratio than the Maximum Sharpe portfolio does NOT mean you are below the frontier
+- A portfolio can be ON the frontier with a lower Sharpe if it targets a different risk level
+- Use the "EFFICIENT FRONTIER ANALYSIS" section above which explicitly states whether the portfolio is on/near/below the frontier
+- Do NOT incorrectly conclude a portfolio is "inefficient" just because it has lower Sharpe than Max Sharpe or higher volatility than Min Variance
 
 {portfolio_info}
 Context from Research Papers:

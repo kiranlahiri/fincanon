@@ -156,15 +156,15 @@ def calculate_efficient_frontier(mean_returns, cov_matrix, num_portfolios=20):
 
     return frontier_portfolios
 
-def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.0):
+def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.04):
     """
     Analyze a portfolio of asset returns.
-    
+
     Args:
         df (pd.DataFrame): DataFrame with Date index and asset returns as columns.
         weights (list/np.array): Portfolio weights, defaults to equal weighting.
-        risk_free_rate (float): Daily risk-free rate (0.0 default).
-    
+        risk_free_rate (float): Annual risk-free rate (default 0.04 = 4%).
+
     Returns:
         dict: portfolio and asset-level metrics
     """
@@ -173,9 +173,14 @@ def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.0):
         df.index = pd.to_datetime(df.index)
 
     n_assets = df.shape[1]
+    asset_names = df.columns.tolist()
+
     if weights is None:
         weights = np.ones(n_assets) / n_assets
     weights = np.array(weights)
+
+    # Convert annual risk-free rate to daily
+    rf_daily = risk_free_rate / 252
 
     # Basic stats
     mean_returns = df.mean()
@@ -185,21 +190,52 @@ def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.0):
     # Portfolio stats
     port_return = np.dot(mean_returns, weights)
     port_vol = np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
-    sharpe = (port_return - risk_free_rate) / port_vol if port_vol > 0 else np.nan
+    sharpe = (port_return - rf_daily) / port_vol if port_vol > 0 else np.nan
 
     # Annualize (assuming ~252 trading days)
     ann_factor = np.sqrt(252)
     ann_return = port_return * 252
     ann_vol = port_vol * ann_factor
-    ann_sharpe = (ann_return - risk_free_rate*252) / ann_vol if ann_vol > 0 else np.nan
+    ann_sharpe = (ann_return - risk_free_rate) / ann_vol if ann_vol > 0 else np.nan
 
     # Calculate portfolio returns series for advanced metrics
     portfolio_returns = df.dot(weights)
 
+    # Time-series data for charts
+    # 1. Cumulative portfolio value (start at 100)
+    cumulative_returns = (1 + portfolio_returns).cumprod()
+    portfolio_value_series = (cumulative_returns * 100).tolist()
+    dates_series = df.index.strftime('%Y-%m-%d').tolist()
+
+    # 2. Rolling Sharpe ratio (90-day window)
+    rolling_window = 90
+    rolling_sharpe_series = []
+    if len(portfolio_returns) >= rolling_window:
+        for i in range(rolling_window - 1, len(portfolio_returns)):
+            window_returns = portfolio_returns.iloc[i - rolling_window + 1:i + 1]
+            window_mean = window_returns.mean()
+            window_std = window_returns.std()
+            if window_std > 0:
+                window_sharpe = ((window_mean - rf_daily) / window_std) * np.sqrt(252)
+                rolling_sharpe_series.append({
+                    'date': dates_series[i],
+                    'sharpe': window_sharpe
+                })
+
+    # 3. Drawdown series
+    running_max = cumulative_returns.expanding().max()
+    drawdown_series = ((cumulative_returns - running_max) / running_max * 100).tolist()
+
+    # 4. Asset-level cumulative returns (for asset view)
+    asset_cumulative_returns = {}
+    for asset in asset_names:
+        asset_cumulative = (1 + df[asset]).cumprod()
+        asset_cumulative_returns[asset] = (asset_cumulative * 100).tolist()
+
     # Tier 1: Advanced Risk Metrics
     max_drawdown = calculate_max_drawdown(portfolio_returns)
-    sortino_daily = calculate_sortino_ratio(portfolio_returns, risk_free_rate)
-    sortino_annual = calculate_sortino_ratio(portfolio_returns, risk_free_rate) * np.sqrt(252)
+    sortino_daily = calculate_sortino_ratio(portfolio_returns, rf_daily)
+    sortino_annual = calculate_sortino_ratio(portfolio_returns, rf_daily) * np.sqrt(252)
 
     # Calculate beta vs market (if SPY is in the portfolio, use it as benchmark)
     beta = np.nan
@@ -207,14 +243,31 @@ def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.0):
         beta = calculate_beta(portfolio_returns, df['SPY'])
 
     # Correlation matrix
-    correlation_matrix = df.corr().to_dict()
+    correlation_matrix = df.corr()
+    correlation_matrix_dict = correlation_matrix.to_dict()
+
+    # Extract top correlations (excluding diagonal)
+    top_correlations = []
+    for i, asset1 in enumerate(asset_names):
+        for j, asset2 in enumerate(asset_names):
+            if i < j:  # Only upper triangle to avoid duplicates
+                corr = correlation_matrix.loc[asset1, asset2]
+                top_correlations.append({
+                    'asset1': asset1,
+                    'asset2': asset2,
+                    'correlation': corr
+                })
+
+    # Sort by absolute correlation value (highest first)
+    top_correlations.sort(key=lambda x: abs(x['correlation']), reverse=True)
+    top_5_correlations = top_correlations[:5]  # Keep top 5
 
     # Diversification ratio: weighted avg volatility / portfolio volatility
     weighted_vols = np.dot(volatilities, weights)
     diversification_ratio = weighted_vols / port_vol if port_vol > 0 else np.nan
 
-    # Tier 2: Portfolio Optimization
-    optimal_portfolios = optimize_portfolio(mean_returns, covariance_matrix, risk_free_rate)
+    # Tier 2: Portfolio Optimization (pass daily risk-free rate)
+    optimal_portfolios = optimize_portfolio(mean_returns, covariance_matrix, rf_daily)
     efficient_frontier = calculate_efficient_frontier(mean_returns, covariance_matrix, num_portfolios=20)
 
     # Annualize frontier points
@@ -242,6 +295,56 @@ def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.0):
         }
     }
 
+    # Windowed metrics (quarterly)
+    # Calculate metrics for each quarter to show trends
+    windowed_metrics = []
+
+    # Group by quarter
+    df_with_quarter = df.copy()
+    df_with_quarter['quarter'] = df_with_quarter.index.to_period('Q')
+
+    for quarter in df_with_quarter['quarter'].unique():
+        quarter_data = df_with_quarter[df_with_quarter['quarter'] == quarter].drop('quarter', axis=1)
+
+        if len(quarter_data) >= 20:  # Need at least 20 days for meaningful stats
+            q_mean_returns = quarter_data.mean()
+            q_cov = quarter_data.cov()
+
+            q_port_return = np.dot(q_mean_returns, weights)
+            q_port_vol = np.sqrt(np.dot(weights.T, np.dot(q_cov, weights)))
+
+            # Annualize
+            q_ann_return = q_port_return * 252
+            q_ann_vol = q_port_vol * np.sqrt(252)
+            q_ann_sharpe = (q_ann_return - risk_free_rate) / q_ann_vol if q_ann_vol > 0 else None
+
+            windowed_metrics.append({
+                'quarter': str(quarter),
+                'return': q_ann_return,
+                'volatility': q_ann_vol,
+                'sharpe': q_ann_sharpe,
+                'days': len(quarter_data)
+            })
+
+    # Asset-level metrics
+    # Per-asset contribution to portfolio return
+    asset_return_contributions = (mean_returns * weights * 252).to_dict()
+
+    # Per-asset contribution to portfolio variance (using marginal contribution)
+    # MCR = (Covariance Matrix * weights) / portfolio_variance
+    marginal_contrib = covariance_matrix.dot(weights) / (port_vol ** 2) if port_vol > 0 else np.zeros(n_assets)
+    asset_variance_contributions = (marginal_contrib * weights * 252).tolist()
+
+    # Per-asset Sharpe ratio (individual asset Sharpe, not contribution)
+    asset_sharpes = {}
+    for asset in asset_names:
+        asset_return_annual = mean_returns[asset] * 252
+        asset_vol_annual = volatilities[asset] * np.sqrt(252)
+        if asset_vol_annual > 0:
+            asset_sharpes[asset] = (asset_return_annual - risk_free_rate) / asset_vol_annual
+        else:
+            asset_sharpes[asset] = None
+
     # Convert NaN/Inf to None for JSON serialization
     def clean_value(val):
         if isinstance(val, (int, float)):
@@ -265,8 +368,27 @@ def analyze_portfolio(df: pd.DataFrame, weights=None, risk_free_rate=0.0):
         "sortino_ratio_daily": clean_value(sortino_daily),
         "sortino_ratio_annual": clean_value(sortino_annual),
         "beta": clean_value(beta),
-        "correlation_matrix": correlation_matrix,
+        "correlation_matrix": correlation_matrix_dict,
+        "top_correlations": [{k: clean_value(v) if k == 'correlation' else v for k, v in corr.items()} for corr in top_5_correlations],
         "diversification_ratio": clean_value(diversification_ratio),
+
+        # Asset-level metrics
+        "asset_weights": {asset: weight for asset, weight in zip(asset_names, weights)},
+        "asset_return_contributions": {k: clean_value(v) for k, v in asset_return_contributions.items()},
+        "asset_variance_contributions": {asset: clean_value(contrib) for asset, contrib in zip(asset_names, asset_variance_contributions)},
+        "asset_sharpes": {k: clean_value(v) for k, v in asset_sharpes.items()},
+
+        # Windowed metrics
+        "windowed_metrics": [{k: clean_value(v) if k != 'quarter' and k != 'days' else v for k, v in window.items()} for window in windowed_metrics],
+
+        # Time-series data for charts
+        "time_series": {
+            "dates": dates_series,
+            "portfolio_value": [clean_value(v) for v in portfolio_value_series],
+            "rolling_sharpe": [{k: clean_value(v) if k != 'date' else v for k, v in point.items()} for point in rolling_sharpe_series],
+            "drawdown": [clean_value(v) for v in drawdown_series],
+            "asset_values": {asset: [clean_value(v) for v in values] for asset, values in asset_cumulative_returns.items()}
+        },
 
         # Tier 2: Portfolio Optimization
         "optimal_portfolios": optimal_portfolios_annual,
