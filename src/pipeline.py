@@ -17,7 +17,8 @@ from langchain_core.documents import Document
 
 # --- CONFIG ---
 COLLECTION_NAME = "fincanon_papers"
-QDRANT_URL = "http://localhost:6333"  # or your Qdrant Cloud URL
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 
 # Make sure your OPENAI_API_KEY is set as env var
 # export OPENAI_API_KEY="sk-..."
@@ -62,7 +63,10 @@ def ingest_pdf(pdf_path: str, doc_title: str):
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
     # 5. Qdrant client
-    qdrant_client = QdrantClient(QDRANT_URL)
+    if QDRANT_API_KEY:
+        qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    else:
+        qdrant_client = QdrantClient(QDRANT_URL)
 
     # Check if collection exists
     try:
@@ -227,7 +231,10 @@ def build_qa_chain(portfolio_context: dict = None):
         portfolio_context: Optional dict with portfolio metrics to enhance answers
     """
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    client = QdrantClient("http://localhost:6333")
+    if QDRANT_API_KEY:
+        client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    else:
+        client = QdrantClient(QDRANT_URL)
 
     # Create vectorstore
     vectorstore = QdrantVectorStore(

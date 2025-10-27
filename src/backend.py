@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 import pandas as pd
 import numpy as np
+import os
 from metrics import analyze_portfolio
 from pipeline import query_fincanon
 
@@ -8,10 +9,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Allow frontend (React on localhost:3000) to talk to backend (FastAPI on localhost:8000)
+# CORS: Allow both localhost (dev) and production frontend
+allowed_origins = [
+    "http://localhost:3000",  # Local development
+    os.getenv("FRONTEND_URL", ""),  # Production frontend (set via env var)
+]
+# Remove empty strings
+allowed_origins = [origin for origin in allowed_origins if origin]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

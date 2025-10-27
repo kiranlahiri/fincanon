@@ -3,6 +3,9 @@ import "./App.css";
 import EfficientFrontierChart from "./EfficientFrontierChart";
 import TimeSeriesCharts from "./TimeSeriesCharts";
 
+// Get API URL from environment variable or default to localhost
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 function App() {
   const [file, setFile] = useState(null);
   const [question, setQuestion] = useState("");
@@ -25,7 +28,7 @@ function App() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://localhost:8000/analyze", {
+      const res = await fetch(`${API_URL}/analyze`, {
         method: "POST",
         body: formData,
       });
@@ -59,7 +62,7 @@ function App() {
         payload.portfolio_metrics = metrics;
       }
 
-      const res = await fetch("http://localhost:8000/query", {
+      const res = await fetch(`${API_URL}/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

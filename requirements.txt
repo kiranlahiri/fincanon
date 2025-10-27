@@ -1,0 +1,15 @@
+fastapi==0.117.1
+uvicorn==0.36.0
+langchain==0.3.27
+langchain-community==0.3.29
+langchain-core==0.3.76
+langchain-openai==0.3.33
+langchain-qdrant==0.2.1
+langchain-text-splitters==0.3.11
+openai==1.107.2
+qdrant-client==1.15.1
+pandas==2.3.2
+numpy==2.2.6
+scipy==1.15.3
+pydantic==2.11.9
+python-multipart
