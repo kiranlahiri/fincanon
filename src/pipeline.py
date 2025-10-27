@@ -77,11 +77,19 @@ def ingest_pdf(pdf_path: str, doc_title: str):
 
     if collection_exists:
         # Add to existing collection
-        qdrant = QdrantVectorStore.from_existing_collection(
-            embedding=embeddings,
-            url="http://localhost:6333",
-            collection_name="fincanon_papers"
-        )
+        if QDRANT_API_KEY:
+            qdrant = QdrantVectorStore.from_existing_collection(
+                embedding=embeddings,
+                url=QDRANT_URL,
+                api_key=QDRANT_API_KEY,
+                collection_name="fincanon_papers"
+            )
+        else:
+            qdrant = QdrantVectorStore.from_existing_collection(
+                embedding=embeddings,
+                url=QDRANT_URL,
+                collection_name="fincanon_papers"
+            )
         print(f"Adding {len(chunks)} chunks to existing collection...")
         try:
             qdrant.add_documents(chunks)
@@ -93,12 +101,21 @@ def ingest_pdf(pdf_path: str, doc_title: str):
         # Create new collection
         print(f"Creating new collection with {len(chunks)} chunks...")
         try:
-            qdrant = QdrantVectorStore.from_documents(
-                chunks,
-                embeddings,
-                url="http://localhost:6333",
-                collection_name="fincanon_papers"
-            )
+            if QDRANT_API_KEY:
+                qdrant = QdrantVectorStore.from_documents(
+                    chunks,
+                    embeddings,
+                    url=QDRANT_URL,
+                    api_key=QDRANT_API_KEY,
+                    collection_name="fincanon_papers"
+                )
+            else:
+                qdrant = QdrantVectorStore.from_documents(
+                    chunks,
+                    embeddings,
+                    url=QDRANT_URL,
+                    collection_name="fincanon_papers"
+                )
             print(f"✅ Successfully created collection with {len(chunks)} chunks")
         except Exception as e:
             print(f"❌ Error creating collection: {e}")
