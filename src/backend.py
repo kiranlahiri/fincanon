@@ -2,8 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 import pandas as pd
 import numpy as np
 import os
-from metrics import analyze_portfolio
-from pipeline import query_fincanon
+from src.metrics import analyze_portfolio
+from src.pipeline import query_fincanon
 
 from fastapi.middleware.cors import CORSMiddleware
 
