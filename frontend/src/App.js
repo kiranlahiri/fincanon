@@ -14,8 +14,38 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [metrics, setMetrics] = useState(null);
 
+  const SAMPLE_PORTFOLIOS = [
+    { label: "Tech Portfolio (AAPL, GOOGL, META, MSFT, NVDA)", file: "tech_portfolio.csv" },
+    { label: "Diversified Portfolio (AAPL, AGG, GLD, JNJ, JPM, MSFT, VNQ, XOM)", file: "diversified_portfolio.csv" },
+    { label: "Balanced 60/40 (SPY, QQQ, AGG, TLT, IWM, LQD)", file: "balanced_60_40.csv" },
+    { label: "Sample Portfolio", file: "sample_portfolio.csv" },
+  ];
+
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
+  };
+
+  const handleLoadSample = async (filename) => {
+    try {
+      const res = await fetch(`/examples/${filename}`);
+      if (!res.ok) throw new Error("Failed to fetch sample");
+      const blob = await res.blob();
+      const sampleFile = new File([blob], filename, { type: "text/csv" });
+      setFile(sampleFile);
+
+      const formData = new FormData();
+      formData.append("file", sampleFile);
+      const analyzeRes = await fetch(`${API_URL}/analyze`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!analyzeRes.ok) throw new Error(`HTTP error! status: ${analyzeRes.status}`);
+      const data = await analyzeRes.json();
+      setMetrics(data);
+    } catch (err) {
+      console.error("Sample load failed:", err);
+      alert("Failed to load sample portfolio.");
+    }
   };
 
   const handleUpload = async () => {
@@ -86,6 +116,15 @@ function App() {
     <h1>FinCanon</h1>
 
     <h2>Upload Portfolio</h2>
+    <div className="sample-portfolios">
+      <p>Try a sample portfolio:</p>
+      {SAMPLE_PORTFOLIOS.map((sample) => (
+        <button key={sample.file} onClick={() => handleLoadSample(sample.file)}>
+          {sample.label}
+        </button>
+      ))}
+    </div>
+    <p>Or upload your own:</p>
     <input type="file" onChange={handleFileChange} />
     <button onClick={handleUpload}>Analyze</button>
 
